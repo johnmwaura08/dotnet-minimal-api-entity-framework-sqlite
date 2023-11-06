@@ -1,0 +1,8 @@
+version: "3.9"  # optional since v1.27.0
+services:
+  dotnet-minimal-api-entity-framework-sqlite:
+    image: dotnet-minimal-api-entity-framework-sqlite
+    restart: always
+    container_name: dotnet-minimal-api-entity-framework-sqlite
+    ports:
+      - "44397:80"
