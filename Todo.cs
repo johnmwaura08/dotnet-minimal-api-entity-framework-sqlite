@@ -14,6 +14,10 @@ namespace TodoStore.Models
 
         public string Type { get; set; }
         public Category Category { get; set; }
+
+        public DateTime? DueDate { get; set; }
+
+        public int Status { get; set; }
     }
 
     public class BatchChangesRequest
@@ -28,6 +32,11 @@ namespace TodoStore.Models
         public const string Remove = "remove";
 
     }
+
+    public class CheckChoresReminder {
+
+        public string Action { get; set; } = "Create";
+        }
     public class Todo
     {
         public int Id { get; set; }
@@ -43,6 +52,8 @@ namespace TodoStore.Models
 
         public Category Category { get; set; } = Category.Todos;
 
+        public DateTime ? DueDate { get; set; }
+
     }
 
 
@@ -53,11 +64,14 @@ namespace TodoStore.Models
         Todos,
         Info,
         ToLearn,
+        TodaysTodos
     }
 
     class TodoDb : DbContext
     {
         public TodoDb(DbContextOptions options) : base(options) { }
         public DbSet<Todo> Todos { get; set; } = null!;
+
+
     }
 }

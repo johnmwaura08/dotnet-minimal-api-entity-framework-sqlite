@@ -2,6 +2,8 @@ using Microsoft.OpenApi.Models;
 using Microsoft.EntityFrameworkCore;
 using TodoStore.Models;
 using System.Net;
+using System.Text;
+using Newtonsoft.Json;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -31,6 +33,92 @@ app.UseCors(builder => builder
 );
 
 
+
+app.MapPost("/RemindTodos", async (TodoDb db) =>
+{
+    static bool IsDateToday(DateTime? inputDate)
+    {
+        if (!inputDate.HasValue)
+        {
+            return false;
+        }
+
+        // Get today's date
+        DateTime today = DateTime.Now.Date;
+
+        // Compare the year, month, and day of both dates
+        return inputDate.Value.Year == today.Year &&
+               inputDate.Value.Month == today.Month &&
+               inputDate.Value.Day == today.Day;
+    }
+
+
+    var todos = await db.Todos.Where(x => (x.Category == Category.Todos || x.Category == Category.TodaysTodos) && x.Status == 1).ToListAsync();
+
+    var newTodos = todos.Where(x => IsDateToday(x.DueDate)).ToList();
+
+    var body = "Hi John, here are your Todos for today: \n";
+
+    foreach (var todo in newTodos)
+    {
+        body += $"{todo.Name}\n";
+    }
+    await SendSmsViaByteFlow(body);
+
+    return newTodos;
+
+});
+
+static async Task SendSmsViaByteFlow(string body)
+{
+  
+    string baseUrl = "http://host.docker.internal:8005/sms/john";
+
+
+    Console.WriteLine($"here in fn");
+
+    // Create a new instance of HttpClient
+    using (HttpClient client = new HttpClient())
+    {
+        try
+        {
+            Console.WriteLine($"here before");
+
+            var postData = new
+            {
+                message = body
+            };
+
+            client.DefaultRequestHeaders.Accept.Add(new System.Net.Http.Headers.MediaTypeWithQualityHeaderValue("application/json"));
+
+
+            // Convert the object to a JSON string
+            string jsonData = JsonConvert.SerializeObject(postData);
+
+            HttpContent content = new StringContent(jsonData, Encoding.UTF8, "application/json");
+
+            var response = await client.PostAsync(baseUrl, content);
+        }
+        catch (HttpRequestException e)
+        {
+            // Log.Error($"API Request Error: {e.Message}");
+            Console.WriteLine(e.Message);
+        }
+    }
+}
+
+app.MapPost("/SendReminder", async (CheckChoresReminder request) =>
+{
+
+    var body = request.Action == "Create" ? "Good morning John, \n Reminder to use vault and set your todos for the day" : "Hi John \n Reminder to review your todos and update their status";
+
+    await SendSmsViaByteFlow(body);
+});
+
+
+
+
+
 app.MapGet("/Todos", async (TodoDb db) => await db.Todos.ToListAsync());
 app.MapGet("/Todo/{id}", async (TodoDb db, int id) => await db.Todos.FindAsync(id));
 app.MapPost("/Todo", async (TodoDb db, Todo Todo) =>
@@ -57,7 +145,8 @@ app.MapPost("/Todos/UpdateFromGrid", async (TodoDb db, BatchChangesRequest reque
                     Category = change.Category,
                     DateCreated = DateTime.Now,
                     DateUpdated = DateTime.Now,
-                    Status = 1
+                    Status = 1,
+                    DueDate = change.Category == Category.TodaysTodos ? DateTime.Now : null
                 };
 
                 todoList.Add(todo);
@@ -68,6 +157,9 @@ app.MapPost("/Todos/UpdateFromGrid", async (TodoDb db, BatchChangesRequest reque
                 if (toUpdate is null) return Results.NotFound();
                 toUpdate.Name = change.Name;
                 toUpdate.DateUpdated = DateTime.Now;
+                toUpdate.DueDate = change.DueDate;
+                toUpdate.Status = change.Status;
+
                 break;
 
             default:
