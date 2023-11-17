@@ -1,18 +1,21 @@
 version: "3.9"  # optional since v1.27.0
 services:
-  dotnet-minimal-api-entity-framework-sqlite:
-    image: dotnet-minimal-api-entity-framework-sqlite
+  app:
+    container_name: task-manager
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: devjonte/task-manager:1.0.0
     restart: always
-    container_name: dotnet-minimal-api-entity-framework-sqlite
     ports:
       - "44397:80"
     privileged: true
     networks:
-      - mountainclimber
+      - task-manager-network
     volumes:
-      - dotnet-minimal-api-entity-framework-sqlite_data-volume:/app/data
+      - task-manager-volume:/app/data
 volumes:
-  dotnet-minimal-api-entity-framework-sqlite_data-volume:      
+  task-manager-volume:
 networks:
-      mountainclimber:
-        driver: bridge
+  task-manager-network:
+    driver: bridge

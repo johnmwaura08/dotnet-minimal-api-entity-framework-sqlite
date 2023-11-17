@@ -7,7 +7,7 @@ using Newtonsoft.Json;
 
 var builder = WebApplication.CreateBuilder(args);
 
-var connectionString = "Data Source=/app/data/Todos.db";
+var connectionString = builder.Configuration.GetConnectionString("TodosDb") ?? "Data Source=/app/data/Todos.db";
 
 builder.Services.AddSqlite<TodoDb>(connectionString);
 
@@ -20,6 +20,20 @@ builder.Services.AddCors();
 // builder.Services.AddDbContext<TodoDb>(options => options.UseInMemoryDatabase("items"));
 
 var app = builder.Build();
+
+// Get the service scope factory
+var serviceScopeFactory = app.Services.GetRequiredService<IServiceScopeFactory>();
+
+// Create a new scope
+using (var scope = serviceScopeFactory.CreateScope())
+{
+    // Get the TodoDb context
+    var context = scope.ServiceProvider.GetRequiredService<TodoDb>();
+
+    // Run migrations
+    context.Database.Migrate();
+}
+
 app.UseSwagger();
 app.UseSwaggerUI(c =>
 {
@@ -32,8 +46,6 @@ app.UseCors(builder => builder
 .AllowAnyMethod()
 .AllowAnyHeader()
 );
-
-
 
 app.MapPost("/RemindTodos", async (TodoDb db) =>
 {
@@ -222,7 +234,5 @@ app.MapDelete("/Todo/{id}", async (TodoDb db, int id) =>
     await db.SaveChangesAsync();
     return Results.Ok();
 });
-
-
 
 app.Run();
