@@ -7,7 +7,8 @@ using Newtonsoft.Json;
 
 var builder = WebApplication.CreateBuilder(args);
 
-var connectionString = builder.Configuration.GetConnectionString("Todos") ?? "Data Source=Todos.db";
+var connectionString = "Data Source=/app/data/Todos.db";
+
 builder.Services.AddSqlite<TodoDb>(connectionString);
 
 builder.Services.AddEndpointsApiExplorer();
@@ -71,7 +72,7 @@ app.MapPost("/RemindTodos", async (TodoDb db) =>
 
 static async Task SendSmsViaByteFlow(string body)
 {
-  
+
     string baseUrl = "http://host.docker.internal:8005/sms/john";
 
 
@@ -106,7 +107,29 @@ static async Task SendSmsViaByteFlow(string body)
         }
     }
 }
+static DateTime ConvertToCurrentTimeZone(DateTime utcDateTime)
+{
+    // Get the current time zone
+    TimeZoneInfo localTimeZone = TimeZoneInfo.Local;
 
+    // Convert the UTC DateTime to the local time zone
+    DateTime localDateTime = TimeZoneInfo.ConvertTimeFromUtc(utcDateTime, localTimeZone);
+
+    return localDateTime;
+}
+static DateTime ConvertIsoToLocalDateTime(string isoDateString)
+{
+    // Parse the ISO date string to a DateTime object
+    DateTime utcDateTime = DateTime.Parse(isoDateString, null, System.Globalization.DateTimeStyles.RoundtripKind);
+
+    // Get the current time zone
+    TimeZoneInfo localTimeZone = TimeZoneInfo.Local;
+
+    // Convert the UTC DateTime to the local time zone
+    DateTime localDateTime = TimeZoneInfo.ConvertTimeFromUtc(utcDateTime, localTimeZone);
+
+    return localDateTime;
+}
 app.MapPost("/SendReminder", async (CheckChoresReminder request) =>
 {
 
@@ -117,22 +140,28 @@ app.MapPost("/SendReminder", async (CheckChoresReminder request) =>
 
 
 
-
-
-app.MapGet("/Todos", async (TodoDb db) => await db.Todos.ToListAsync());
+app.MapGet("/Todo", async (TodoDb db) => await db.Todos.ToListAsync());
 app.MapGet("/Todo/{id}", async (TodoDb db, int id) => await db.Todos.FindAsync(id));
 app.MapPost("/Todo", async (TodoDb db, Todo Todo) =>
 {
-    Todo.DateCreated = DateTime.Now;
-    Todo.DateUpdated = DateTime.Now;
+    DateTime utcDateTime = DateTime.UtcNow;
+
+    // Convert to the current time zone
+    DateTime localDateTime = ConvertToCurrentTimeZone(utcDateTime);
+    Todo.DateCreated = localDateTime;
+    Todo.DateUpdated = localDateTime;
     Todo.Status = 1;
     await db.Todos.AddAsync(Todo);
     await db.SaveChangesAsync();
     return Results.Created($"/Todo/{Todo.Id}", Todo);
 });
-app.MapPost("/Todos/UpdateFromGrid", async (TodoDb db, BatchChangesRequest request) =>
+app.MapPost("/Todo/UpdateFromGrid", async (TodoDb db, BatchChangesRequest request) =>
 {
     var todoList = new List<Todo>();
+    DateTime utcDateTime = DateTime.UtcNow;
+
+    // Convert to the current time zone
+    DateTime localDateTime = ConvertToCurrentTimeZone(utcDateTime);
     foreach (var change in request.Changes)
     {
         switch (change.Type)
@@ -143,10 +172,10 @@ app.MapPost("/Todos/UpdateFromGrid", async (TodoDb db, BatchChangesRequest reque
                     Id = 0,
                     Name = change.Name,
                     Category = change.Category,
-                    DateCreated = DateTime.Now,
-                    DateUpdated = DateTime.Now,
+                    DateCreated = localDateTime,
+                    DateUpdated = localDateTime,
                     Status = 1,
-                    DueDate = change.Category == Category.TodaysTodos ? DateTime.Now : null
+                    DueDate = change.Category == Category.TodaysTodos ? localDateTime : null
                 };
 
                 todoList.Add(todo);
@@ -157,7 +186,7 @@ app.MapPost("/Todos/UpdateFromGrid", async (TodoDb db, BatchChangesRequest reque
                 if (toUpdate is null) return Results.NotFound();
                 toUpdate.Name = change.Name;
                 toUpdate.DateUpdated = DateTime.Now;
-                toUpdate.DueDate = change.DueDate;
+                toUpdate.DueDate = change.DueDate is not null ? ConvertIsoToLocalDateTime(change?.DueDate?.ToString()) : null;
                 toUpdate.Status = change.Status;
 
                 break;

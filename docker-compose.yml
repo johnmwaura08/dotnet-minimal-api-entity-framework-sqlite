@@ -10,9 +10,9 @@ services:
     networks:
       - mountainclimber
     volumes:
-      - data-volume:/app/data
+      - dotnet-minimal-api-entity-framework-sqlite_data-volume:/app/data
 volumes:
-  data-volume:      
+  dotnet-minimal-api-entity-framework-sqlite_data-volume:      
 networks:
       mountainclimber:
         driver: bridge
