@@ -18,8 +18,21 @@ namespace TodoStore.Models
         public DateTime? DueDate { get; set; }
 
         public int Status { get; set; }
+
+        public string? Priority { get; set; }
+
     }
 
+
+
+
+
+    public class BatchActionsRequest
+    {
+        public List<int> Ids { get; set; }
+
+        public string Action { get; set; } = "Complete";
+    }
     public class BatchChangesRequest
     {
 
@@ -33,10 +46,11 @@ namespace TodoStore.Models
 
     }
 
-    public class CheckChoresReminder {
+    public class CheckChoresReminder
+    {
 
         public string Action { get; set; } = "Create";
-        }
+    }
     public class Todo
     {
         public int Id { get; set; }
@@ -52,7 +66,10 @@ namespace TodoStore.Models
 
         public Category Category { get; set; } = Category.Todos;
 
-        public DateTime ? DueDate { get; set; }
+        public DateTime? DueDate { get; set; }
+
+        public string Priority { get; set; } = "Low";
+
 
     }
 
@@ -64,14 +81,17 @@ namespace TodoStore.Models
         Todos,
         Info,
         ToLearn,
-        TodaysTodos
+        TodaysTodos,
+
+        ProjectIdeas,
+
+        Future
     }
 
     class TodoDb : DbContext
     {
         public TodoDb(DbContextOptions options) : base(options) { }
         public DbSet<Todo> Todos { get; set; } = null!;
-
 
     }
 }

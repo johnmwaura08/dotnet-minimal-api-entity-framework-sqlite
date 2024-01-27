@@ -1,7 +1,13 @@
 version: "3.9"  # optional since v1.27.0
 services:
-  dotnet-minimal-api-entity-framework-sqlite:
-    image: dotnet-minimal-api-entity-framework-sqlite
+  app:
+    container_name: task-manager
+    environment:
+      - TZ=America/Chicago
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: devjonte/task-manager:1.0.0
     restart: always
     container_name: dotnet-minimal-api-entity-framework-sqlite
     ports:

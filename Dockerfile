@@ -1,25 +1,16 @@
 
 
+# Use the official .NET SDK image as the build image
+
+FROM mcr.microsoft.com/dotnet/sdk:7.0 AS build
+
+ENV TZ=America/Chicago
 
 
-FROM mcr.microsoft.com/dotnet/aspnet:7.0 AS base
+# Set the working directory in the container
 WORKDIR /app
 EXPOSE 80
 
-FROM mcr.microsoft.com/dotnet/sdk:7.0 AS build
-WORKDIR /src
-COPY ["PizzaStore.csproj", "."]
-RUN dotnet restore "./PizzaStore.csproj"
-COPY . .
-WORKDIR "/src/."
-RUN dotnet build "PizzaStore.csproj" -c Release -o /app/build
-
-FROM build AS publish
-RUN dotnet publish "PizzaStore.csproj" -c Release -o /app/publish /p:UseAppHost=false
-
-FROM base AS final
-WORKDIR /app
-COPY --from=publish /app/publish .
-COPY ["Todos.db", "Todos.db"]
+# Set the entry point for the container
 
 ENTRYPOINT ["dotnet", "PizzaStore.dll"]

@@ -2,6 +2,7 @@
 using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using TodoStore.Models;
 
@@ -10,9 +11,11 @@ using TodoStore.Models;
 namespace PizzaStore.Migrations
 {
     [DbContext(typeof(TodoDb))]
-    partial class TodoDbModelSnapshot : ModelSnapshot
+    [Migration("20231209190734_add_priority")]
+    partial class add_priority
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder.HasAnnotation("ProductVersion", "7.0.10");

@@ -7,7 +7,10 @@ using Newtonsoft.Json;
 
 var builder = WebApplication.CreateBuilder(args);
 
-var connectionString = builder.Configuration.GetConnectionString("Todos") ?? "Data Source=Todos.db";
+var connectionString = builder.Configuration.GetConnectionString("TodosDb") ?? "Data Source=/app/data/Todos.db";
+// var connectionString = "Data Source=Todos.db";
+
+
 builder.Services.AddSqlite<TodoDb>(connectionString);
 
 builder.Services.AddEndpointsApiExplorer();
@@ -32,38 +35,66 @@ app.UseCors(builder => builder
 .AllowAnyHeader()
 );
 
+static bool IsDateToday(DateTime? inputDate)
+{
+    if (!inputDate.HasValue)
+    {
+        return false;
+    }
 
+    // Get today's date
+    DateTime today = DateTime.Now.Date;
+
+    // Compare the year, month, and day of both dates
+    return inputDate.Value.Year == today.Year &&
+           inputDate.Value.Month == today.Month &&
+           inputDate.Value.Day == today.Day;
+}
+
+static bool IsNotPastToday(DateTime? inputDate)
+{
+    if (!inputDate.HasValue)
+    {
+        return false;
+    }
+
+    // Get today's date
+    DateTime today = DateTime.Now.Date;
+
+    // Compare the input date with today
+    return inputDate.Value <= today;
+}
 
 app.MapPost("/RemindTodos", async (TodoDb db) =>
 {
-    static bool IsDateToday(DateTime? inputDate)
-    {
-        if (!inputDate.HasValue)
-        {
-            return false;
-        }
-
-        // Get today's date
-        DateTime today = DateTime.Now.Date;
-
-        // Compare the year, month, and day of both dates
-        return inputDate.Value.Year == today.Year &&
-               inputDate.Value.Month == today.Month &&
-               inputDate.Value.Day == today.Day;
-    }
-
 
     var todos = await db.Todos.Where(x => (x.Category == Category.Todos || x.Category == Category.TodaysTodos) && x.Status == 1).ToListAsync();
 
-    var newTodos = todos.Where(x => IsDateToday(x.DueDate)).ToList();
+    var newTodos = todos.Where(x => IsNotPastToday(x.DueDate)).OrderByDescending(x => x.Priority).ToList();
 
-    var body = "Hi John, here are your Todos for today: \n";
-
-    foreach (var todo in newTodos)
+    if (newTodos.Any())
     {
-        body += $"{todo.Name}\n";
+
+        var body = "Hi John, here are your Todos for today: \n";
+
+        foreach (var todo in newTodos)
+        {
+            if (todo.DueDate is not null)
+            {
+                body += $"Priority: {todo.Priority}\n";
+                body += $"{todo.Name}\n";
+                var formattedDate = todo.DueDate.Value.ToString("MM/dd/yyyy");
+                body += $"Due Date: {formattedDate}\n\n";
+            }
+            else
+            {
+                body += $"{todo.Name}\n\n";
+            }
+        }
+
+        await SendSmsViaByteFlow(body);
     }
-    await SendSmsViaByteFlow(body);
+
 
     return newTodos;
 
@@ -71,7 +102,7 @@ app.MapPost("/RemindTodos", async (TodoDb db) =>
 
 static async Task SendSmsViaByteFlow(string body)
 {
-  
+
     string baseUrl = "http://host.docker.internal:8005/sms/john";
 
 
@@ -107,6 +138,32 @@ static async Task SendSmsViaByteFlow(string body)
     }
 }
 
+
+static DateTime ConvertToCurrentTimeZone(DateTime utcDateTime)
+{
+    // Get the Central Time zone
+    TimeZoneInfo centralTimeZone = TimeZoneInfo.FindSystemTimeZoneById("Central Standard Time");
+
+    // Convert the UTC DateTime to the Central Time zone
+    DateTime centralDateTime = TimeZoneInfo.ConvertTimeFromUtc(utcDateTime, centralTimeZone);
+
+    return centralDateTime;
+}
+
+static DateTime ConvertIsoToLocalDateTime(string isoDateString)
+{
+    // Parse the ISO date string to a DateTime object
+    DateTime utcDateTime = DateTime.Parse(isoDateString, null, System.Globalization.DateTimeStyles.RoundtripKind);
+
+    // Get the Central Time zone
+    TimeZoneInfo centralTimeZone = TimeZoneInfo.FindSystemTimeZoneById("Central Standard Time");
+
+    // Convert the UTC DateTime to the Central Time zone
+    DateTime centralDateTime = TimeZoneInfo.ConvertTimeFromUtc(utcDateTime, centralTimeZone);
+
+    return centralDateTime;
+}
+
 app.MapPost("/SendReminder", async (CheckChoresReminder request) =>
 {
 
@@ -117,9 +174,7 @@ app.MapPost("/SendReminder", async (CheckChoresReminder request) =>
 
 
 
-
-
-app.MapGet("/Todos", async (TodoDb db) => await db.Todos.ToListAsync());
+app.MapGet("/Todo", async (TodoDb db) => await db.Todos.OrderBy(x => x.Priority).ToListAsync());
 app.MapGet("/Todo/{id}", async (TodoDb db, int id) => await db.Todos.FindAsync(id));
 app.MapPost("/Todo", async (TodoDb db, Todo Todo) =>
 {
@@ -130,9 +185,104 @@ app.MapPost("/Todo", async (TodoDb db, Todo Todo) =>
     await db.SaveChangesAsync();
     return Results.Created($"/Todo/{Todo.Id}", Todo);
 });
-app.MapPost("/Todos/UpdateFromGrid", async (TodoDb db, BatchChangesRequest request) =>
+
+app.MapPost("/Todo/MassInsert", async (TodoDb db, List<Todo> todos) =>
 {
     var todoList = new List<Todo>();
+    DateTime utcDateTime = DateTime.UtcNow;
+    DateTime localDateTime = ConvertToCurrentTimeZone(utcDateTime);
+
+    var toAdd = todos.Where(x => x.Category == Category.Info || x.Category == Category.ToLearn).ToList();
+    foreach (var todo in toAdd)
+    {
+        var newTodo = new Todo
+        {
+            Id = 0,
+            Name = todo.Name,
+            Category = todo.Category,
+            DateCreated = localDateTime,
+            DateUpdated = localDateTime,
+            Status = 1,
+        };
+
+        todoList.Add(newTodo);
+    }
+    await db.Todos.AddRangeAsync(todoList);
+    await db.SaveChangesAsync();
+    return Results.Ok();
+});
+
+
+app.MapPost("/Todo/MassUpdate", async (TodoDb db, BatchActionsRequest request) =>
+{
+    var todoList = new List<Todo>();
+    DateTime utcDateTime = DateTime.UtcNow;
+
+    // Convert to the current time zone
+    DateTime localDateTime = ConvertToCurrentTimeZone(utcDateTime);
+
+    var todos = await db.Todos.Where(x => request.Ids.Contains(x.Id)).ToListAsync();
+
+    switch (request.Action)
+    {
+        case "COMPLETE":
+            foreach (var todo in todos)
+            {
+
+                todo.Status = 2;
+                todo.DateUpdated = localDateTime;
+            }
+
+            break;
+
+        case "TODAY":
+
+            foreach (var todo in todos)
+            {
+                todo.Status = 1;
+                todo.DateUpdated = localDateTime;
+                todo.DueDate = localDateTime;
+            }
+
+            break;
+        case "FUTURE":
+
+            foreach (var todo in todos)
+            {
+                todo.Status = 1;
+                todo.DateUpdated = localDateTime;
+                todo.Category = Category.Future;
+            }
+
+            break;
+
+        case "DELETE":
+
+            db.Todos.RemoveRange(todos);
+            break;
+
+        case "RAISE-PRIORITY":
+            foreach (var todo in todos)
+            {
+                todo.Priority = "High";
+                todo.DateUpdated = localDateTime;
+            }
+            break;
+        default:
+            break;
+    }
+    await db.SaveChangesAsync();
+    return Results.Ok();
+});
+
+app.MapPost("/Todo/UpdateFromGrid", async (TodoDb db, BatchChangesRequest request) =>
+{
+    var todoList = new List<Todo>();
+    DateTime utcDateTime = DateTime.UtcNow;
+
+    // Convert to the current time zone
+    DateTime localDateTime = ConvertToCurrentTimeZone(utcDateTime);
+
     foreach (var change in request.Changes)
     {
         switch (change.Type)
@@ -159,6 +309,7 @@ app.MapPost("/Todos/UpdateFromGrid", async (TodoDb db, BatchChangesRequest reque
                 toUpdate.DateUpdated = DateTime.Now;
                 toUpdate.DueDate = change.DueDate;
                 toUpdate.Status = change.Status;
+                toUpdate.Priority = !string.IsNullOrEmpty(change?.Priority) ? change.Priority : toUpdate.Priority;
 
                 break;
 
